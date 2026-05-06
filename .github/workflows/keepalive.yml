@@ -1,0 +1,33 @@
+name: 🐷 Marrana Keepalive
+
+on:
+  # Ejecutar automáticamente cada 5 días a las 10:00 UTC (07:00 hora Chile)
+  schedule:
+    - cron: '0 10 */5 * *'
+
+  # Permitir ejecutar manualmente desde la pestaña Actions
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    name: Pinguear proyectos Supabase
+
+    steps:
+      - name: 📥 Checkout repo
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 🏓 Pinguear proyectos
+        run: node ping.js
+
+      - name: 📊 Resumen final
+        if: always()
+        run: |
+          echo "## 🐷 Marrana Keepalive ejecutado"
+          echo "Fecha: $(date)"
+          echo "Estado: ${{ job.status }}"
