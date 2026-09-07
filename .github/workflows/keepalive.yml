@@ -1,12 +1,16 @@
 name: 🐷 Marrana Keepalive
 
 on:
-  # Ejecutar automáticamente cada 5 días a las 10:00 UTC (07:00 hora Chile)
+  # Ejecutar automáticamente TODOS LOS DÍAS a las 10:00 UTC (07:00 hora Chile)
   schedule:
-    - cron: '0 10 */5 * *'
+    - cron: '0 10 * * *'
 
   # Permitir ejecutar manualmente desde la pestaña Actions
   workflow_dispatch:
+
+# Necesario para que el paso de mini-commit pueda hacer push
+permissions:
+  contents: write
 
 jobs:
   ping:
@@ -24,6 +28,18 @@ jobs:
 
       - name: 🏓 Pinguear proyectos
         run: node ping.js
+
+      # Mini-commit diario: mantiene el repo "activo" para que GitHub
+      # NO desactive el workflow programado tras 60 días de inactividad.
+      - name: 🕒 Mini-commit para mantener vivo el workflow
+        if: always()
+        run: |
+          echo "Último keepalive: $(date -u)" > last-run.txt
+          git config user.name "marrana-keepalive-bot"
+          git config user.email "actions@github.com"
+          git add last-run.txt
+          git commit -m "keepalive: $(date -u +%Y-%m-%d)" || echo "Sin cambios que commitear"
+          git push
 
       - name: 📊 Resumen final
         if: always()
