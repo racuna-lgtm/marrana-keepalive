@@ -1,7 +1,13 @@
 // =====================================================
 // MARRANA KEEPALIVE
-// Pinguea proyectos Supabase para evitar pausa automática
-// Se ejecuta cada 5 días vía GitHub Actions
+// Pinguea proyectos Supabase para evitar la pausa automática.
+// Se ejecuta TODOS LOS DÍAS vía GitHub Actions.
+//
+// Cada ping consulta la base de datos real del proyecto:
+//   - Si se conoce una tabla (ej: 'miembros'), consulta esa tabla.
+//   - Si no, consulta la raíz REST (/rest/v1/), que también obliga a
+//     PostgREST a leer el esquema de la base → cuenta como actividad real.
+// Ya NO se usa la tabla ficticia 'public_health_check' (daba 404).
 // =====================================================
 
 const PROYECTOS = [
@@ -50,16 +56,19 @@ const PROYECTOS = [
 ];
 
 /**
- * Pinguea un proyecto haciendo una consulta REST simple.
- * Si la tabla es conocida (ej: 'miembros'), consulta esa.
- * Si no, hace una llamada al endpoint base que también cuenta como actividad.
+ * Pinguea un proyecto haciendo una consulta REST real a su base de datos.
+ * Si se conoce una tabla, consulta esa; si no, consulta la raíz REST.
  */
 async function pinguearProyecto(proyecto) {
     const inicio = Date.now();
-    const tablaConsulta = proyecto.tabla || 'public_health_check';
+
+    // Con tabla conocida: consulta esa tabla (lectura real de datos).
+    // Sin tabla: consulta la raíz REST, que obliga a leer el esquema.
+    const url = proyecto.tabla
+        ? `${proyecto.url}/rest/v1/${proyecto.tabla}?limit=1`
+        : `${proyecto.url}/rest/v1/`;
 
     try {
-        const url = `${proyecto.url}/rest/v1/${tablaConsulta}?limit=1`;
         const response = await fetch(url, {
             method: 'GET',
             headers: {
@@ -71,9 +80,8 @@ async function pinguearProyecto(proyecto) {
 
         const duracion = Date.now() - inicio;
 
-        // 200 = OK, 404 = tabla no existe (pero el proyecto respondió → cuenta como actividad)
-        // 401/403 = el proyecto está vivo pero protegido (también cuenta)
-        // 500+ = problema del servidor
+        // 200 = OK. 401/403 = vivo pero protegido (también cuenta como actividad).
+        // 500+ (incluye 503 de proyecto pausado) = problema → se marca como fallo.
         if (response.status >= 200 && response.status < 500) {
             console.log(`✅ ${proyecto.nombre.padEnd(25)} [${response.status}] ${duracion}ms`);
             return { ok: true, status: response.status, duracion };
@@ -92,7 +100,7 @@ async function main() {
     console.log('===========================================');
     console.log('🐷 MARRANA KEEPALIVE');
     console.log(`📅 ${new Date().toISOString()}`);
-    console.log(`📦 Pinguenado ${PROYECTOS.length} proyectos`);
+    console.log(`📦 Pingueando ${PROYECTOS.length} proyectos`);
     console.log('===========================================\n');
 
     const resultados = [];
@@ -108,7 +116,8 @@ async function main() {
     console.log(`📊 RESUMEN: ${exitos} exitosos · ${fallos} con error`);
     console.log('===========================================');
 
-    // Si hubo fallos, salir con error para que GitHub Actions lo marque rojo
+    // Si hubo fallos (ej: un proyecto pausado devolviendo 503), salir con error
+    // para que GitHub Actions lo marque en rojo y te avise por correo.
     if (fallos > 0) {
         console.error('\n⚠️  Algunos proyectos tuvieron problemas. Revisa los logs.');
         process.exit(1);
